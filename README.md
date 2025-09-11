@@ -60,3 +60,11 @@ This runs a CLI-based interaction using LangGraph.
 
 ```
 streamlit run web_app.py
+```
+
+#### Sample Prompt
+
+```
+List pods on <custom-name> namespace
+```
+```
