@@ -67,4 +67,3 @@ streamlit run web_app.py
 ```
 List pods on <custom-name> namespace
 ```
-```
