@@ -5,21 +5,29 @@ from langchain_mistralai import ChatMistralAI
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode
 import os
+import uuid
 from dotenv import load_dotenv
+
+# DB helper
+from chat_history import init_db, save_message, load_messages, list_sessions
 
 # Load .env file
 load_dotenv()
+init_db()  # Ensure DB exists
+
 
 # --- Backend call to MCP ---
 async def run_k8s_query(user_input, model_name="mistral-medium-latest"):
     mistral_key = os.getenv("MISTRAL_API_KEY")
+    mcp_server_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp")
+
     model = ChatMistralAI(model=model_name, api_key=mistral_key)
 
     client = MultiServerMCPClient(
         {
             "kubernetes": {
                 "transport": "streamable_http",
-                "url": "http://127.0.0.1:8000/mcp",
+                "url": mcp_server_url,
             }
         }
     )
@@ -68,26 +76,40 @@ def main():
     selected_model = st.selectbox("Select Model", options=list(MODEL_OPTIONS.keys()), index=1)
     st.session_state.selected_model = MODEL_OPTIONS[selected_model]
 
-    # Initialize session state
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    # --- Session Management ---
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+
+    sessions = list_sessions()
+    selected_session = st.sidebar.selectbox("Previous Sessions", options=["New Session"] + sessions)
+
+    if selected_session == "New Session":
+        session_id = st.session_state.session_id
+    else:
+        session_id = selected_session
+
+    # Load chat messages
+    messages = load_messages(session_id)
 
     # Chat input
     user_input = st.chat_input("Ask something about Kubernetes...")
     if user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
+        # Save user message
+        save_message(session_id, "user", user_input)
         with st.spinner("Thinking..."):
             answer = asyncio.run(run_k8s_query(user_input, st.session_state.selected_model))
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+            # Save assistant message
+            save_message(session_id, "assistant", answer)
+        messages = load_messages(session_id)
 
-    # Display chat messages
-    for msg in st.session_state.messages:
+    # Display chat history
+    for msg in messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
     # Clear chat button
     if st.button("Clear Chat"):
-        st.session_state.messages = []
+        st.session_state.session_id = str(uuid.uuid4())  # start fresh session
 
 
 if __name__ == "__main__":
