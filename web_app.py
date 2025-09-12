@@ -16,17 +16,23 @@ load_dotenv()
 init_db()  # Ensure DB exists
 
 # --- Backend call to MCP ---
-async def run_k8s_query(user_input, model_name="mistral-medium-latest"):
+async def run_multi_query(user_input, model_name="mistral-medium-latest"):
     mistral_key = os.getenv("MISTRAL_API_KEY")
     mcp_server_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp")
+    aws_s3_mcp_url = os.getenv("AWS_S3_MCP_URL", "http://127.0.0.1:8010/mcp")
 
     model = ChatMistralAI(model=model_name, api_key=mistral_key)
 
+    # Multi-server MCP client
     client = MultiServerMCPClient(
         {
             "kubernetes": {
                 "transport": "streamable_http",
                 "url": mcp_server_url,
+            },
+            "aws_s3": {
+                "transport": "streamable_http",
+                "url": aws_s3_mcp_url,
             }
         }
     )
@@ -56,14 +62,15 @@ async def run_k8s_query(user_input, model_name="mistral-medium-latest"):
     builder.add_edge("tools", "call_model")
     graph = builder.compile()
 
-    # Build the conversation history from session
+    # Updated system prompt to include both K8s and S3
     conversation_history = [
         {
             "role": "system",
             "content": (
-                "You are a Kubernetes assistant. "
-                "Answer directly and concisely based only on the user request. "
-                "Do not list generic options unless the user explicitly asks for them."
+                "You are an assistant capable of managing both Kubernetes and AWS S3. "
+                "Answer concisely and directly based on the user request. "
+                "Use Kubernetes tools for cluster-related queries and AWS S3 tools for bucket/object queries. "
+                "Do not give generic suggestions unless explicitly asked."
             ),
         }
     ] + [
@@ -184,7 +191,7 @@ def main():
                 )
             with col3:
                 if end_idx < total_sessions:
-                    if st.button("➡️ Next", use_container_width=True):
+                    if st.button("➡️", use_container_width=True):
                         st.session_state.sessions_page += 1
                         st.rerun()
         
@@ -214,7 +221,7 @@ def main():
         # Get assistant response
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                answer = asyncio.run(run_k8s_query(user_input, st.session_state.selected_model))
+                answer = asyncio.run(run_multi_query(user_input, st.session_state.selected_model))
                 st.markdown(answer)
         
         # Save assistant message to DB

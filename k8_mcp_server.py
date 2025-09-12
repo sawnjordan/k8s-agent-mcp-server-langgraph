@@ -133,6 +133,269 @@ def get_unhealthy_pods_all_namespaces() -> str:
         "No unhealthy pods found across all namespaces."
     )
 
+# --- RBAC & Security ---
+@mcp.tool(name="whoami", description="Show the current Kubernetes identity")
+def whoami() -> str:
+    return run_kubectl("kubectl auth whoami", "Unable to determine Kubernetes identity.")
+
+@mcp.tool(name="can_i", description="Check if the current user can perform an action on a resource")
+def can_i(verb: str, resource: str, namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl auth can-i {verb} {resource} -n {namespace}", "Unable to check permissions.")
+
+@mcp.tool(name="get_roles", description="List all Roles in a namespace")
+def get_roles(namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl get roles -n {namespace}", f"No Roles found in '{namespace}' namespace.")
+
+@mcp.tool(name="get_cluster_roles", description="List all ClusterRoles")
+def get_cluster_roles() -> str:
+    return run_kubectl("kubectl get clusterroles", "No ClusterRoles found.")
+
+@mcp.tool(name="get_rolebindings", description="List all RoleBindings in a namespace")
+def get_rolebindings(namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl get rolebindings -n {namespace}", f"No RoleBindings found in '{namespace}' namespace.")
+
+@mcp.tool(name="get_clusterrolebindings", description="List all ClusterRoleBindings")
+def get_clusterrolebindings() -> str:
+    return run_kubectl("kubectl get clusterrolebindings", "No ClusterRoleBindings found.")
+
+# --- Workloads: StatefulSets, DaemonSets, Jobs ---
+@mcp.tool(name="get_statefulsets", description="List all StatefulSets in a namespace")
+def get_statefulsets(namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl get statefulsets -n {namespace}", f"No StatefulSets found in '{namespace}' namespace.")
+
+@mcp.tool(name="describe_statefulset", description="Describe a StatefulSet in a namespace")
+def describe_statefulset(name: str, namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl describe statefulset {name} -n {namespace}", f"StatefulSet '{name}' not found in '{namespace}' namespace.")
+
+@mcp.tool(name="get_daemonsets", description="List all DaemonSets in a namespace")
+def get_daemonsets(namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl get daemonsets -n {namespace}", f"No DaemonSets found in '{namespace}' namespace.")
+
+@mcp.tool(name="describe_daemonset", description="Describe a DaemonSet in a namespace")
+def describe_daemonset(name: str, namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl describe daemonset {name} -n {namespace}", f"DaemonSet '{name}' not found in '{namespace}' namespace.")
+
+@mcp.tool(name="get_jobs", description="List all Jobs in a namespace")
+def get_jobs(namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl get jobs -n {namespace}", f"No Jobs found in '{namespace}' namespace.")
+
+@mcp.tool(name="describe_job", description="Describe a Job in a namespace")
+def describe_job(name: str, namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl describe job {name} -n {namespace}", f"Job '{name}' not found in '{namespace}' namespace.")
+
+@mcp.tool(name="get_cronjobs", description="List all CronJobs in a namespace")
+def get_cronjobs(namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl get cronjobs -n {namespace}", f"No CronJobs found in '{namespace}' namespace.")
+
+@mcp.tool(name="describe_cronjob", description="Describe a CronJob in a namespace")
+def describe_cronjob(name: str, namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl describe cronjob {name} -n {namespace}", f"CronJob '{name}' not found in '{namespace}' namespace.")
+
+
+# --- Storage: PV, PVC, StorageClasses ---
+@mcp.tool(name="get_pvs", description="List all PersistentVolumes (PVs)")
+def get_pvs() -> str:
+    return run_kubectl("kubectl get pv", "No PersistentVolumes found in the cluster.")
+
+@mcp.tool(name="describe_pv", description="Describe a PersistentVolume")
+def describe_pv(name: str) -> str:
+    return run_kubectl(f"kubectl describe pv {name}", f"PersistentVolume '{name}' not found.")
+
+@mcp.tool(name="get_pvcs", description="List all PersistentVolumeClaims (PVCs) in a namespace")
+def get_pvcs(namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl get pvc -n {namespace}", f"No PVCs found in '{namespace}' namespace.")
+
+@mcp.tool(name="describe_pvc", description="Describe a PersistentVolumeClaim in a namespace")
+def describe_pvc(name: str, namespace: str = "default") -> str:
+    return run_kubectl(f"kubectl describe pvc {name} -n {namespace}", f"PVC '{name}' not found in '{namespace}' namespace.")
+
+@mcp.tool(name="get_storageclasses", description="List all StorageClasses")
+def get_storageclasses() -> str:
+    return run_kubectl("kubectl get sc", "No StorageClasses found in the cluster.")
+
+
+# --- Pod Debugging ---
+@mcp.tool(name="get_pending_pods", description="List pods stuck in Pending state across all namespaces")
+def get_pending_pods() -> str:
+    return run_kubectl(
+        "kubectl get pods --all-namespaces --field-selector=status.phase=Pending",
+        "No pending pods found across all namespaces."
+    )
+
+@mcp.tool(name="get_crashloop_pods", description="List pods in CrashLoopBackOff across all namespaces")
+def get_crashloop_pods() -> str:
+    return run_kubectl(
+        "kubectl get pods --all-namespaces | grep CrashLoopBackOff",
+        "No CrashLoopBackOff pods found across all namespaces."
+    )
+
+@mcp.tool(name="logs_all_containers", description="Get logs from all containers in a pod")
+def logs_all_containers(pod_name: str, namespace: str = "default") -> str:
+    return run_kubectl(
+        f"kubectl logs {pod_name} -n {namespace} --all-containers=true",
+        f"No logs found for pod '{pod_name}' in '{namespace}' namespace."
+    )
+
+
+# --- Rollout / Deployment Debugging ---
+@mcp.tool(name="rollout_status", description="Check rollout status of a deployment")
+def rollout_status(deployment_name: str, namespace: str = "default") -> str:
+    return run_kubectl(
+        f"kubectl rollout status deployment {deployment_name} -n {namespace}",
+        f"Deployment '{deployment_name}' not found in '{namespace}' namespace."
+    )
+
+@mcp.tool(name="rollout_restart", description="Restart a deployment by forcing a new rollout")
+def rollout_restart(deployment_name: str, namespace: str = "default") -> str:
+    return run_kubectl(
+        f"kubectl rollout restart deployment {deployment_name} -n {namespace}",
+        f"Failed to restart deployment '{deployment_name}' in '{namespace}' namespace."
+    )
+
+@mcp.tool(name="rollback_deployment", description="Rollback a deployment to its previous version")
+def rollback_deployment(deployment_name: str, namespace: str = "default") -> str:
+    return run_kubectl(
+        f"kubectl rollout undo deployment {deployment_name} -n {namespace}",
+        f"Failed to rollback deployment '{deployment_name}' in '{namespace}' namespace."
+    )
+
+
+# --- Networking & Connectivity ---
+@mcp.tool(name="get_endpoints", description="List all endpoints in a namespace")
+def get_endpoints(namespace: str = "default") -> str:
+    return run_kubectl(
+        f"kubectl get endpoints -n {namespace}",
+        f"No endpoints found in '{namespace}' namespace."
+    )
+
+@mcp.tool(name="port_forward_service", description="Forward a local port to a service port")
+def port_forward_service(service_name: str, local_port: int = None, remote_port: int = None, namespace: str = "default") -> str:
+    # Auto-detect service port if not provided
+    if remote_port is None:
+        try:
+            svc_output = run_kubectl(f"kubectl get service {service_name} -n {namespace} -o json")
+            import json
+            svc_data = json.loads(svc_output)
+            remote_port = svc_data["spec"]["ports"][0]["port"]
+        except Exception as e:
+            return f"Failed to detect service port for '{service_name}': {str(e)}"
+
+    if local_port is None:
+        local_port = remote_port  # default: same as service port
+
+    return run_kubectl(
+        f"kubectl port-forward service/{service_name} {local_port}:{remote_port} -n {namespace}",
+        f"Failed to port-forward service '{service_name}' in '{namespace}' namespace."
+    )
+
+@mcp.tool(name="port_forward_pod", description="Forward a local port to a pod port")
+def port_forward_pod(pod_name: str, local_port: int = None, remote_port: int = None, namespace: str = "default") -> str:
+    # Auto-detect pod container port if not provided
+    if remote_port is None:
+        try:
+            pod_output = run_kubectl(f"kubectl get pod {pod_name} -n {namespace} -o json")
+            import json
+            pod_data = json.loads(pod_output)
+            # Take the first port of the first container if it exists
+            containers = pod_data["spec"]["containers"]
+            if "ports" in containers[0] and containers[0]["ports"]:
+                remote_port = containers[0]["ports"][0]["containerPort"]
+            else:
+                return f"No container ports found in pod '{pod_name}', please specify remote_port manually."
+        except Exception as e:
+            return f"Failed to detect pod container port for '{pod_name}': {str(e)}"
+
+    if local_port is None:
+        local_port = remote_port  # default: same as container port
+
+    return run_kubectl(
+        f"kubectl port-forward pod/{pod_name} {local_port}:{remote_port} -n {namespace}",
+        f"Failed to port-forward pod '{pod_name}' in '{namespace}' namespace."
+    )
+
+
+@mcp.tool(name="port_forward", description="Forward a local port to a pod port")
+def port_forward(pod_name: str, local_port: int, remote_port: int, namespace: str = "default") -> str:
+    return run_kubectl(
+        f"kubectl port-forward pod/{pod_name} {local_port}:{remote_port} -n {namespace}",
+        f"Failed to port-forward pod '{pod_name}' in '{namespace}' namespace."
+    )
+
+@mcp.tool(name="test_dns", description="Test DNS resolution inside the cluster using busybox")
+def test_dns() -> str:
+    return run_kubectl(
+        "kubectl run dns-test --rm -it --image=busybox --restart=Never -- nslookup kubernetes.default",
+        "Failed to resolve DNS inside the cluster."
+    )
+
+
+# --- Node Debugging ---
+@mcp.tool(name="describe_node", description="Describe a node in the cluster")
+def describe_node(node_name: str) -> str:
+    return run_kubectl(
+        f"kubectl describe node {node_name}",
+        f"Node '{node_name}' not found."
+    )
+
+@mcp.tool(name="cordon_node", description="Mark a node as unschedulable")
+def cordon_node(node_name: str) -> str:
+    return run_kubectl(
+        f"kubectl cordon {node_name}",
+        f"Failed to cordon node '{node_name}'."
+    )
+
+@mcp.tool(name="uncordon_node", description="Mark a node as schedulable")
+def uncordon_node(node_name: str) -> str:
+    return run_kubectl(
+        f"kubectl uncordon {node_name}",
+        f"Failed to uncordon node '{node_name}'."
+    )
+
+@mcp.tool(name="drain_node", description="Drain a node by evicting workloads (ignoring daemonsets)")
+def drain_node(node_name: str) -> str:
+    return run_kubectl(
+        f"kubectl drain {node_name} --ignore-daemonsets --delete-emptydir-data",
+        f"Failed to drain node '{node_name}'."
+    )
+
+
+# --- YAML / Config Inspection ---
+@mcp.tool(name="get_resource_yaml", description="Get full YAML definition of a resource")
+def get_resource_yaml(kind: str, name: str, namespace: str = "default") -> str:
+    ns_part = f"-n {namespace}" if namespace else ""
+    return run_kubectl(
+        f"kubectl get {kind} {name} {ns_part} -o yaml",
+        f"Resource {kind}/{name} not found in namespace '{namespace}'."
+    )
+
+@mcp.tool(name="diff_manifest", description="Run kubectl diff on a manifest before applying")
+def diff_manifest(file_path: str) -> str:
+    return run_kubectl(
+        f"kubectl diff -f {file_path}",
+        f"No differences found for manifest {file_path}."
+    )
+
+# --- Kubernetes Context Management ---
+@mcp.tool(name="get_current_context", description="Get the current Kubernetes context")
+def get_current_context() -> str:
+    return run_kubectl(
+        "kubectl config current-context",
+        "Unable to get the current Kubernetes context."
+    )
+
+@mcp.tool(name="switch_context", description="Switch to a different Kubernetes context")
+def switch_context(context_name: str) -> str:
+    return run_kubectl(
+        f"kubectl config use-context {context_name}",
+        f"Failed to switch to context '{context_name}'. Make sure it exists."
+    )
+
+@mcp.tool(name="list_contexts", description="List all Kubernetes contexts in your kubeconfig")
+def list_contexts() -> str:
+    return run_kubectl(
+        "kubectl config get-contexts -o name",
+        "No contexts found in your kubeconfig."
+    )
 
 # --- Run MCP server and FastAPI health endpoint ---
 def run_mcp_server():

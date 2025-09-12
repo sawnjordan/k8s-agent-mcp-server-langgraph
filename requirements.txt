@@ -6,3 +6,5 @@ python-dotenv
 streamlit
 fastapi
 uvicorn[standard]
+boto3
+botocore

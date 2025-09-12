@@ -3,10 +3,13 @@ version: '3.8'
 services:
   kubernetes-chat:
     build: .
-    container_name: kubernetes-chat
+    container_name: kubernetes-agent
     ports:
-      - "8501:8501"
-      - "8000:8000"
+      - "8501:8501"  # Streamlit
+      - "8000:8000"  # K8s MCP server
+      - "8001:8001"  # K8s health
+      - "8010:8010"  # S3 MCP server
+      - "8011:8011"  # S3 health
     environment:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - MCP_SERVER_URL=http://localhost:8000/mcp

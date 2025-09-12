@@ -6,7 +6,7 @@ services:
    build:
       context: .
       dockerfile: Dockerfile.kind
-   container_name: kubernetes-cont
+   container_name: kubernetes-kind-agent
    # network_mode: "host"
    ports:
      - "8501:8501"  # Streamlit UI
