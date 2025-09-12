@@ -1,8 +1,19 @@
 import subprocess
 from mcp.server.fastmcp import FastMCP
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+import uvicorn
+import threading
 
 # Initialize MCP server
 mcp = FastMCP("Kubernetes")
+
+# --- FastAPI app for health check ---
+app = FastAPI()
+
+@app.get("/health")
+def health_check():
+    return JSONResponse(content={"status": "ok"})
 
 # --- Utility: run kubectl safely ---
 def run_kubectl(command: str, empty_msg: str = None) -> str:
@@ -123,6 +134,11 @@ def get_unhealthy_pods_all_namespaces() -> str:
     )
 
 
-# --- Run MCP server ---
-if __name__ == "__main__":
+# --- Run MCP server and FastAPI health endpoint ---
+def run_mcp_server():
+    # Run MCP server on port 8000
     mcp.run(transport="streamable-http")
+
+if __name__ == "__main__":
+    threading.Thread(target=run_mcp_server, daemon=True).start()
+    uvicorn.run(app, host="0.0.0.0", port=8001)

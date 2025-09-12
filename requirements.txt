@@ -4,3 +4,5 @@ langchain-mistralai
 langgraph
 python-dotenv
 streamlit
+fastapi
+uvicorn[standard]

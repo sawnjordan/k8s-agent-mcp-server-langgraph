@@ -21,14 +21,14 @@ source venv/bin/activate
 
 3. **Install required packages:**
 
-```bash
+```python
 
 pip install -r requirements.txt
 ```
 
 4. **Create a .env file in the project root and add your API keys:**
 
-```
+```bash
 MISTRAL_API_KEY=your_mistral_key
 ```
 
@@ -38,7 +38,7 @@ MISTRAL_API_KEY=your_mistral_key
 
 - Terminal 1 - Custom MCP Server - Start the MCP server:
 
-```
+```python
 python k8_mcp_server.py
 ```
 
@@ -51,14 +51,14 @@ You can interact with the MCP server in two ways:
 + Option 1: Run the client script
 
 
-```
+```python
 python mcp_client_langgraph.py
 ```
 This runs a CLI-based interaction using LangGraph.
 
 + Option 2: Run the Streamlit web app
 
-```
+```python
 streamlit run web_app.py
 ```
 
@@ -67,3 +67,25 @@ streamlit run web_app.py
 ```
 List pods on <custom-name> namespace
 ```
+
+## Using Docker for build and run
+
+### If you are using Kind Cluster
+
+- Run below command
+```bash
+chmod +x ./build_and_run_kind.sh
+./build_and_run_kind.sh
+```
+
+## If you are using Cluster on Cloud (AWS)
+
+- Create `.env.aws` file with the AWS credentials as shown on `.env.aws.example`
+- Run below command
+```bash
+chmod +x ./build_and_run.sh
+```
+
+### Chat History
+
+- Chat history are saved on `./data/`.

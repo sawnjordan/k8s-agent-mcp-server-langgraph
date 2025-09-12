@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+ kubernetes-chat:
+  #  build: Dockerfile.kind
+   build:
+      context: .
+      dockerfile: Dockerfile.kind
+   container_name: kubernetes-cont
+   # network_mode: "host"
+   ports:
+     - "8501:8501"  # Streamlit UI
+     - "8000:8000"  # MCP server
+   environment:
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - MCP_SERVER_URL=http://localhost:8000/mcp
+    #  - KUBECONFIG=/root/.kube/config
+      - KUBECONFIG=/root/.kube-writable/config
+
+   volumes:
+     - ~/.kube:/root/.kube:ro    # mount host kubeconfig for kind
+     - ./data:/app/data          # persist chat DB
+   restart: unless-stopped
+   healthcheck:
+     test: ["CMD", "curl", "-f", "http://localhost:8501"]
+     interval: 10s
+     timeout: 5s
+     retries: 5
+   networks:
+     - kind
+
+networks: 
+ kind:
+   external: true

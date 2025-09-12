@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  kubernetes-chat:
+    build: .
+    container_name: kubernetes-chat
+    ports:
+      - "8501:8501"
+      - "8000:8000"
+    environment:
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - MCP_SERVER_URL=http://localhost:8000/mcp
+    volumes:
+      - chat_data:/app/data        # Persist SQLite DB
+      - ~/.kube:/root/.kube:ro     # kubeconfig (if needed)
+      - ~/.aws:/root/.aws:ro
+    restart: unless-stopped
+    env_file:
+      - .env.aws
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  chat_data:
