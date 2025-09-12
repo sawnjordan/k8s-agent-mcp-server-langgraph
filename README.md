@@ -84,6 +84,7 @@ chmod +x ./build_and_run_kind.sh
 - Run below command
 ```bash
 chmod +x ./build_and_run.sh
+./build_and_run.sh
 ```
 
 ### Chat History
