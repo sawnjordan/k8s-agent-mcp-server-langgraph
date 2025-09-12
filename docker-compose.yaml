@@ -22,6 +22,12 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - k8s_agent_net
 
 volumes:
   chat_data:
+
+networks:
+  k8s_agent_net:
+    name: k8s_agent_net
