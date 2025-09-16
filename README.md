@@ -75,7 +75,7 @@ List pods on <custom-name> namespace
 - Create `.env.kind` file as shown on `.env.kind.sample`.
 - Run below commands: 
 ```
-chmod +x ./get_kind_control_plane.sh`
+chmod +x ./get_kind_control_plane.sh
 chmod +x ./build_and_run_kind.sh
 ```
 - To get the kind cluster control plane IP and Port run  below command:
