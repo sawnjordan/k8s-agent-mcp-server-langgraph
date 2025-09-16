@@ -150,6 +150,7 @@ activemq-data/
 # Environments
 .env
 .env.aws
+.env.kind
 .envrc
 .venv
 env/

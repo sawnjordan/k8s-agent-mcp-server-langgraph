@@ -41,7 +41,7 @@
 
     echo "🏗️  Building Docker image..."
 # docker compose -f docker-compose.kind.yaml build
-    docker compose -f docker-compose.kind.yaml build --no-cache
+    docker compose -f docker-compose.kind.yaml build
 
 
 echo "🚀 Starting services..."
@@ -77,8 +77,8 @@ if docker compose -f docker-compose.kind.yaml ps | grep -q "Up"; then
     echo "✅ Services are running!"
     echo ""
     echo "🌐 Access your application at:"
-    echo "   Streamlit UI: http://localhost:8501"
-    echo "   MCP Server:   http://localhost:8000"
+    echo "   Streamlit UI: http://127.0.0.1:8501"
+    echo "   MCP Server:   http://127.0.0.1:8000"
     echo ""
     echo "📋 Useful commands:"
     echo "   View logs:    docker compose -f docker-compose.kind.yaml logs -f"

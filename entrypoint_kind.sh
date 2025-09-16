@@ -1,37 +1,52 @@
 #!/bin/bash
-set -ex  # <- exit on error and print every command
+set -euo pipefail
+
+DATA_DIR="/home/appuser/app/data"
+if [ -d "$DATA_DIR" ]; then
+    echo "🔧 Fixing permissions for data directory..."
+    chown -R appuser:appuser "$DATA_DIR"
+fi
+
+export PATH="$HOME/.local/bin:$PATH"
 
 echo "👤 Running as user: $(whoami)"
-echo "📂 Listing /root before anything:"
-ls -la /root || true
+echo "📂 HOME: $HOME"
 
-# --- Fix kubeconfig inside container ---
-KUBE_DIR_WRITABLE="/root/.kube-writable"
-echo "📂 Creating writable kube directory at $KUBE_DIR_WRITABLE"
+# --- Fix kubeconfig inside container/user environment ---
+KUBE_DIR_WRITABLE="$HOME/.kube-writable"
 mkdir -p "$KUBE_DIR_WRITABLE"
 
-echo "📂 Listing $KUBE_DIR_WRITABLE after mkdir:"
-ls -la "$KUBE_DIR_WRITABLE" || true
+if [ -f "$HOME/.kube/config" ]; then
+  echo "📄 Copying kubeconfig from $HOME/.kube/config"
+  cp "$HOME/.kube/config" "$KUBE_DIR_WRITABLE/config"
+elif [ -f "/root/.kube/config" ]; then
+  echo "📄 Copying kubeconfig from /root/.kube/config"
+  cp "/root/.kube/config" "$KUBE_DIR_WRITABLE/config"
+else
+  echo "❌ No kubeconfig found!"
+  exit 1
+fi
 
-echo "📄 Copying kubeconfig..."
-cp /root/.kube/config "$KUBE_DIR_WRITABLE/config"
-
-echo "📄 Listing $KUBE_DIR_WRITABLE after copy:"
-ls -la "$KUBE_DIR_WRITABLE" || true
-
-# Get the Kind control-plane IP
-echo "🔧 Updating kubeconfig server address..."
-sed -i "s|127.0.0.1:38067|multi-node-control-plane:6443|g" "$KUBE_DIR_WRITABLE/config"
-
-# Export KUBECONFIG so all kubectl calls inside container use it
 export KUBECONFIG="$KUBE_DIR_WRITABLE/config"
-echo "✅ Using kubeconfig at $KUBECONFIG"
-echo "📄 kubeconfig head:"
-head -n 10 "$KUBECONFIG"
+
+echo "📄 kubeconfig head (before patch):"
+head -n 10 "$KUBECONFIG" || true
+
+# --- Read control-plane IP/port from environment ---
+CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-127.0.0.1}"
+CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-6443}"
+
+echo "🔧 Using control-plane: $CONTROL_PLANE_IP:$CONTROL_PLANE_PORT"
+
+# Patch kubeconfig server (only in cluster.server line)
+sed -i "s#\(server: https://\)[^:]\+:[0-9]\+#\1$CONTROL_PLANE_IP:$CONTROL_PLANE_PORT#g" "$KUBECONFIG"
+
+echo "📄 kubeconfig head (after patch):"
+head -n 10 "$KUBECONFIG" || true
 
 # --- Start MCP server in background ---
 echo "🚀 Starting MCP server..."
-KUBECONFIG="$KUBE_DIR_WRITABLE/config" python k8_mcp_server.py &
+KUBECONFIG="$KUBECONFIG" python k8_mcp_server.py &
 MCP_PID=$!
 echo "🆔 MCP server PID: $MCP_PID"
 
@@ -45,5 +60,4 @@ echo "✅ MCP server ready!"
 
 # --- Start Streamlit (foreground) ---
 echo "🚀 Starting Streamlit UI..."
-export KUBECONFIG="$KUBE_DIR_WRITABLE/config"
-exec streamlit run web_app.py --server.address=0.0.0.0 --server.port=8501 --server.headless=true
+exec streamlit run web_app_kind.py --server.address=0.0.0.0 --server.port=8501 --server.headless=true
