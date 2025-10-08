@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 version: '3.8'
 
 services:
@@ -10,12 +11,14 @@ services:
       - "8001:8001"  # K8s health
       - "8010:8010"  # S3 MCP server
       - "8011:8011"  # S3 health
+      - "5678:5678"  # n8n port forward
     environment:
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      # - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - MCP_SERVER_URL=http://localhost:8000/mcp
     volumes:
-      - chat_data:/app/data        # Persist SQLite DB
-      - ~/.kube:/root/.kube:ro     # kubeconfig (if needed)
+      - chat_data:/app/data
+      - ~/.kube:/root/.kube:ro
       - ~/.aws:/root/.aws:ro
     restart: unless-stopped
     env_file:

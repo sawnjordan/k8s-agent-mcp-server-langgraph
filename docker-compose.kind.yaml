@@ -1,30 +1,31 @@
-version: "3.8"
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+version: '3.8'
 
 services:
- kubernetes-chat:
-   build:
+  kubernetes-chat:
+    build:
       context: .
       dockerfile: Dockerfile.kind
-   container_name: kubernetes-kind-agent
-   ports:
+    container_name: kubernetes-kind-agent
+    ports:
      - "8501:8501"
      - "8000:8000"
-   volumes:
+    volumes:
     #  - ~/.kube:/root/.kube:ro
     - ~/.kube:/home/appuser/.kube:ro
     # - ./data:/app/data
     - ./data:/home/appuser/app/data
-   environment:
+    environment:
       - KUBECONFIG=/home/appuser/.kube-writable/config
-   restart: unless-stopped
-   env_file:
+    restart: unless-stopped
+    env_file:
       - .env.kind
-   healthcheck:
+    healthcheck:
      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
      interval: 10s
      timeout: 5s
      retries: 5
-   networks:
+    networks:
      - kind
 
 networks: 

@@ -1,6 +1,7 @@
 mcp
 langchain-mcp-adapters
-langchain-mistralai
+# langchain-mistralai
+langchain-openai
 langgraph
 python-dotenv
 streamlit

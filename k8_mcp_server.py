@@ -32,7 +32,48 @@ def run_kubectl(command: str, empty_msg: str = None) -> str:
             return "Sorry, I don’t have a tool for that action yet."
         return f"Error: {stderr}"
 
+active_forwards = {}
 
+def start_port_forward(target_type: str, name: str, local_port: int, remote_port: int, namespace: str):
+    key = f"{target_type}/{namespace}/{name}"
+
+    if key in active_forwards:
+        return f"⚠️ Port-forward already active for {key} on local port {active_forwards[key]['local_port']}"
+
+    cmd = [
+        "kubectl",
+        "port-forward",
+        f"{target_type}/{name}",
+        f"{local_port}:{remote_port}",
+        "-n",
+        namespace,
+        "--address",
+        "0.0.0.0"
+    ]
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    active_forwards[key] = {
+        "proc": proc,
+        "local_port": local_port,
+        "remote_port": remote_port,
+        "namespace": namespace,
+        "target_type": target_type
+    }
+
+    return f"✅ Port-forward active: http://localhost:{local_port} -> {target_type}/{name}:{remote_port}"
+
+def stop_port_forward(target_type: str, name: str, namespace: str = "default"):
+    key = f"{target_type}/{namespace}/{name}"
+    if key not in active_forwards:
+        return f"No active port-forward found for {key}"
+
+    proc = active_forwards[key]["proc"]
+    proc.terminate()
+    proc.wait()
+    del active_forwards[key]
+
+    return f"Port-forward stopped for {key}"
 
 # --- Core resources ---
 @mcp.tool(name="get_nodes", description="List all nodes in the cluster")
@@ -270,33 +311,28 @@ def get_endpoints(namespace: str = "default") -> str:
 
 @mcp.tool(name="port_forward_service", description="Forward a local port to a service port")
 def port_forward_service(service_name: str, local_port: int = None, remote_port: int = None, namespace: str = "default") -> str:
-    # Auto-detect service port if not provided
+    # Auto-detect service port
     if remote_port is None:
         try:
             svc_output = run_kubectl(f"kubectl get service {service_name} -n {namespace} -o json")
-            import json
             svc_data = json.loads(svc_output)
             remote_port = svc_data["spec"]["ports"][0]["port"]
         except Exception as e:
             return f"Failed to detect service port for '{service_name}': {str(e)}"
 
     if local_port is None:
-        local_port = remote_port  # default: same as service port
+        local_port = remote_port
 
-    return run_kubectl(
-        f"kubectl port-forward service/{service_name} {local_port}:{remote_port} -n {namespace}",
-        f"Failed to port-forward service '{service_name}' in '{namespace}' namespace."
-    )
+    return start_port_forward("service", service_name, local_port, remote_port, namespace)
+
 
 @mcp.tool(name="port_forward_pod", description="Forward a local port to a pod port")
 def port_forward_pod(pod_name: str, local_port: int = None, remote_port: int = None, namespace: str = "default") -> str:
-    # Auto-detect pod container port if not provided
+    # Auto-detect pod container port
     if remote_port is None:
         try:
             pod_output = run_kubectl(f"kubectl get pod {pod_name} -n {namespace} -o json")
-            import json
             pod_data = json.loads(pod_output)
-            # Take the first port of the first container if it exists
             containers = pod_data["spec"]["containers"]
             if "ports" in containers[0] and containers[0]["ports"]:
                 remote_port = containers[0]["ports"][0]["containerPort"]
@@ -306,20 +342,22 @@ def port_forward_pod(pod_name: str, local_port: int = None, remote_port: int = N
             return f"Failed to detect pod container port for '{pod_name}': {str(e)}"
 
     if local_port is None:
-        local_port = remote_port  # default: same as container port
+        local_port = remote_port
 
-    return run_kubectl(
-        f"kubectl port-forward pod/{pod_name} {local_port}:{remote_port} -n {namespace}",
-        f"Failed to port-forward pod '{pod_name}' in '{namespace}' namespace."
-    )
+    return start_port_forward("pod", pod_name, local_port, remote_port, namespace)
 
 
-@mcp.tool(name="port_forward", description="Forward a local port to a pod port")
-def port_forward(pod_name: str, local_port: int, remote_port: int, namespace: str = "default") -> str:
-    return run_kubectl(
-        f"kubectl port-forward pod/{pod_name} {local_port}:{remote_port} -n {namespace}",
-        f"Failed to port-forward pod '{pod_name}' in '{namespace}' namespace."
-    )
+@mcp.tool(name="stop_port_forward", description="Stop an active port-forward")
+def stop_port_forward_tool(name: str, namespace: str = "default", target_type: str = "service") -> str:
+    return stop_port_forward(target_type, name, namespace)
+
+
+# @mcp.tool(name="port_forward", description="Forward a local port to a pod port")
+# def port_forward(pod_name: str, local_port: int, remote_port: int, namespace: str = "default") -> str:
+#     return run_kubectl(
+#         f"kubectl port-forward pod/{pod_name} {local_port}:{remote_port} -n {namespace}",
+#         f"Failed to port-forward pod '{pod_name}' in '{namespace}' namespace."
+#     )
 
 @mcp.tool(name="test_dns", description="Test DNS resolution inside the cluster using busybox")
 def test_dns() -> str:

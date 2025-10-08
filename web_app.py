@@ -1,7 +1,8 @@
 import asyncio
 import streamlit as st
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_mistralai import ChatMistralAI
+# from langchain_mistralai import ChatMistralAI
+from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode
 import os
@@ -16,12 +17,20 @@ load_dotenv()
 init_db()  # Ensure DB exists
 
 # --- Backend call to MCP ---
-async def run_multi_query(user_input, model_name="mistral-medium-latest"):
-    mistral_key = os.getenv("MISTRAL_API_KEY")
+async def run_multi_query(user_input, model_name="deepseek-reasoner"):
+    # mistral_key = os.getenv("MISTRAL_API_KEY")
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+
     mcp_server_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp")
     aws_s3_mcp_url = os.getenv("AWS_S3_MCP_URL", "http://127.0.0.1:8010/mcp")
 
-    model = ChatMistralAI(model=model_name, api_key=mistral_key)
+    # model = ChatMistralAI(model=model_name, api_key=mistral_key)
+    model = ChatOpenAI(
+        # model="deepseek-chat",
+        model=model_name,
+        api_key=deepseek_key,
+        base_url="https://api.deepseek.com",
+    )
 
     # Multi-server MCP client
     client = MultiServerMCPClient(
@@ -106,10 +115,14 @@ def main():
         st.title("☸️ Kubernetes Chat")
         
         # Model selection at the top
+        # MODEL_OPTIONS = {
+        #     "Mistral Large": "mistral-large-latest",
+        #     "Mistral Medium": "mistral-medium-latest",
+        #     "Mistral Small": "mistral-small",
+        # }
         MODEL_OPTIONS = {
-            "Mistral Large": "mistral-large-latest",
-            "Mistral Medium": "mistral-medium-latest",
-            "Mistral Small": "mistral-small",
+            "Deepseek Chat": "deepseek-chat",
+            "Deepseek Reasoner": "deepseek-reasoner",
         }
         selected_model = st.selectbox("Select Model", options=list(MODEL_OPTIONS.keys()), index=1)
         st.session_state.selected_model = MODEL_OPTIONS[selected_model]

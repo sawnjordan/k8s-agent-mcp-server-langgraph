@@ -1,6 +1,7 @@
 import asyncio
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_mistralai import ChatMistralAI
+# from langchain_mistralai import ChatMistralAI
+from langchain_openai import ChatOpenAI   
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode
 import os
@@ -11,10 +12,17 @@ load_dotenv()
 
 
 async def run_k8s_query(user_input: str):
-    mistral_key = os.getenv("MISTRAL_API_KEY")
+    # mistral_key = os.getenv("MISTRAL_API_KEY")
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
 
     # Initialize Mistral model
-    model = ChatMistralAI(model="mistral-medium-latest", api_key=mistral_key)
+    # model = ChatMistralAI(model="mistral-medium-latest", api_key=mistral_key)
+    model = ChatOpenAI(
+        # model="deepseek-chat",
+        model="deepseek-reasoner",
+        api_key=deepseek_key,
+        base_url="https://api.deepseek.com",
+    )
 
     # Connect to your Kubernetes MCP server
     client = MultiServerMCPClient(
