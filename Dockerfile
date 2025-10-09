@@ -20,31 +20,36 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     && ./aws/install \
     && rm -rf awscliv2.zip aws/
 
-# Set working directory
-WORKDIR /app
+# Create non-root user
+RUN useradd -m -u 1000 appuser
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+ENV PATH="/home/appuser/.local/bin:$PATH"
+USER appuser
+WORKDIR /home/appuser/app
+
+RUN mkdir -p /home/appuser/app/data \
+    && chown -R appuser:appuser /home/appuser/app/data
+
+# Copy requirements first for caching
+COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY . .
+COPY --chown=appuser:appuser . .
 
-# Create supervisor configuration directory
-RUN mkdir -p /etc/supervisor/conf.d
-
-# Copy supervisor configuration
-COPY supervisord.conf /etc/supervisor/supervisord.conf
-
-# Create logs directory
-RUN mkdir -p /var/log/supervisor
+# Supervisor config
+RUN mkdir -p /home/appuser/logs
+COPY --chown=appuser:appuser supervisord.conf /home/appuser/supervisord.conf
 
 # Expose ports (8501 for Streamlit, 8000 for MCP server)
 EXPOSE 8501 8000
 
 # Create entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# COPY entrypoint.sh /entrypoint.sh
+# RUN chmod +x /entrypoint.sh
+
+COPY --chown=appuser:appuser entrypoint.sh /home/appuser/entrypoint.sh
+RUN chmod +x /home/appuser/entrypoint.sh
 
 # Run supervisor to manage both services
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/home/appuser/entrypoint.sh"]

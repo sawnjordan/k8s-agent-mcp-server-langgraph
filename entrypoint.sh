@@ -1,83 +1,106 @@
 #!/bin/bash
 set -euo pipefail
 
+DATA_DIR="/home/appuser/app/data"
+
 # ==============================
-# Cleanup function
+# Cleanup handling
 # ==============================
 cleanup() {
     echo "🛑 Cleaning up background processes..."
-    [ -n "${K8_PID:-}" ] && kill "$K8_PID" 2>/dev/null || true
-    [ -n "${S3_PID:-}" ] && kill "$S3_PID" 2>/dev/null || true
+    [ -n "${MCP_PID:-}" ] && kill "$MCP_PID" 2>/dev/null || true
     [ -n "${STREAMLIT_PID:-}" ] && kill "$STREAMLIT_PID" 2>/dev/null || true
     exit 1
 }
-
-# Trap signals and errors
 trap cleanup SIGINT SIGTERM ERR
 
 # ==============================
-# Health check function
+# Fix data directory permissions
 # ==============================
-check_health() {
-  local name=$1
-  local port=$2
-  local retries=30
+if [ -d "$DATA_DIR" ]; then
+    echo "[SETUP] Fixing permissions for $DATA_DIR..."
+    chown -R appuser:appuser "$DATA_DIR"
+fi
 
-  echo "🔍 Waiting for $name on port $port..."
-  for i in $(seq 1 $retries); do
-    if curl -fs http://localhost:$port/health >/dev/null; then
-      echo "✅ $name ready!"
-      return 0
-    fi
-    sleep 1
-  done
+export PATH="$HOME/.local/bin:$PATH"
 
-  echo "❌ $name failed to become healthy after ${retries}s"
-  return 1
-}
+echo "[ENV] Running as user: $(whoami)"
+echo "[ENV] HOME: $HOME"
 
 # ==============================
-# Start servers
+# Prepare kubeconfig
 # ==============================
-echo "🚀 Starting Kubernetes MCP server..."
-python k8_mcp_server.py > /var/log/k8s_mcp.log 2>&1 &
-K8_PID=$!
+KUBE_DIR_WRITABLE="$HOME/.kube-writable"
+mkdir -p "$KUBE_DIR_WRITABLE"
 
-echo "🚀 Starting AWS S3 MCP server..."
-python aws_s3_server.py > /var/log/s3_mcp.log 2>&1 &
-S3_PID=$!
-
-# ==============================
-# Run health checks in background
-# ==============================
-check_health "Kubernetes MCP server" 8001 &
-K8_HEALTH_PID=$!
-
-check_health "AWS S3 MCP server" 8011 &
-S3_HEALTH_PID=$!
-
-# Wait for the first health check success
-if wait -n $K8_HEALTH_PID $S3_HEALTH_PID; then
-  echo "🎉 At least one MCP server is ready, starting Streamlit..."
+if [ -f "$HOME/.kube/config" ]; then
+  echo "[KUBECONFIG] Copying from $HOME/.kube/config"
+  cp "$HOME/.kube/config" "$KUBE_DIR_WRITABLE/config"
+elif [ -f "/root/.kube/config" ]; then
+  echo "[KUBECONFIG] Copying from /root/.kube/config"
+  cp "/root/.kube/config" "$KUBE_DIR_WRITABLE/config"
 else
-  echo "❌ Both MCP servers failed health checks!"
-  cleanup
+  echo "[KUBECONFIG] ❌ No kubeconfig found!"
+  exit 1
+fi
+
+export KUBECONFIG="$KUBE_DIR_WRITABLE/config"
+
+echo "[KUBECONFIG] First 10 lines before patch:"
+head -n 10 "$KUBECONFIG" || true
+
+# ==============================
+# Patch kubeconfig
+# ==============================
+CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-127.0.0.1}"
+CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-6443}"
+echo "[KUBECONFIG] Using control-plane: $CONTROL_PLANE_IP:$CONTROL_PLANE_PORT"
+
+# Replace only cluster.server line
+sed -i "s#\(server: https://\)[^:]\+:[0-9]\+#\1$CONTROL_PLANE_IP:$CONTROL_PLANE_PORT#g" "$KUBECONFIG"
+
+echo "[KUBECONFIG] First 10 lines after patch:"
+head -n 10 "$KUBECONFIG" || true
+
+# ==============================
+# Start MCP server
+# ==============================
+echo "[MCP] Starting MCP server..."
+# KUBECONFIG="$KUBECONFIG" python k8_mcp_server.py > /var/log/mcp.log 2>&1 &
+KUBECONFIG="$KUBECONFIG" python k8_mcp_server.py &
+
+MCP_PID=$!
+echo "[MCP] PID: $MCP_PID"
+
+# Wait for MCP health with timeout
+echo "[MCP] Waiting for MCP server health..."
+for i in {1..30}; do
+   if curl -fs http://localhost:8001/health >/dev/null; then
+      echo "[MCP] ✅ Ready!"
+      break
+   fi
+   echo "[MCP] ⏱ Still waiting..."
+   sleep 1
+done
+
+if ! curl -fs http://localhost:8001/health >/dev/null; then
+    echo "[MCP] ❌ MCP server failed to start within timeout"
+    cleanup
 fi
 
 # ==============================
-# Start Streamlit in foreground
+# Start Streamlit
 # ==============================
-echo "🚀 Starting Streamlit..."
-streamlit run web_app.py \
+echo "[STREAMLIT] Starting UI..."
+streamlit run web_app_kind.py \
   --server.address=0.0.0.0 \
   --server.port=8501 \
   --server.headless=true &
 STREAMLIT_PID=$!
 
 # ==============================
-# Monitor all processes
+# Monitor processes
 # ==============================
-# If *any* child process dies, cleanup
-wait -n $K8_PID $S3_PID $STREAMLIT_PID
-echo "⚠️ One process exited unexpectedly. Triggering cleanup..."
+wait -n $MCP_PID $STREAMLIT_PID
+echo "[SYSTEM] ⚠️ One process exited unexpectedly. Cleaning up..."
 cleanup

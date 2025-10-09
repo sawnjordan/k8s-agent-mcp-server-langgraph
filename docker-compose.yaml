@@ -16,6 +16,7 @@ services:
       # - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - MCP_SERVER_URL=http://localhost:8000/mcp
+      - KUBECONFIG=/home/appuser/.kube-writable/config
     volumes:
       - chat_data:/app/data
       - ~/.kube:/root/.kube:ro
