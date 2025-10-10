@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 import threading
 import json
+import time
 
 # --- Initialize MCP server for AWS S3 ---
 s3_mcp = FastMCP("AWS S3", port=8010)
@@ -15,12 +16,14 @@ s3_health_app = FastAPI()
 
 @s3_health_app.get("/health")
 def health_check():
+    """Check if AWS S3 is accessible."""
     try:
         s3 = boto3.client("s3")
         s3.list_buckets()
         return JSONResponse(content={"status": "ok"})
     except ClientError as e:
         return JSONResponse(content={"status": "error", "detail": str(e)}, status_code=500)
+
 
 # --- Utility function: paginated delete objects ---
 def delete_all_objects(s3, bucket_name):
@@ -223,11 +226,20 @@ def update_bucket_policy_json(bucket_name: str, new_policy_json: str) -> str:
     except ClientError as e:
         return f"AWS error: {e}"
 
-# --- Run S3 MCP and Health server ---
 def run_s3_health_server():
-    uvicorn.run(s3_health_app, host="0.0.0.0", port=8011)
+    """Start FastAPI health server (blocking)."""
+    uvicorn.run(s3_health_app, host="0.0.0.0", port=8011, log_level="info")
+
+def run_s3_mcp_server():
+    """Start MCP server (blocking)."""
+    s3_mcp.run(transport="streamable-http")
 
 if __name__ == "__main__":
-    threading.Thread(target=run_s3_health_server, daemon=True).start()
-    print("AWS S3 Health server running on port 8011")
-    s3_mcp.run(transport="streamable-http")
+    # Start MCP server in a thread
+    mcp_thread = threading.Thread(target=run_s3_mcp_server, daemon=True)
+    mcp_thread.start()
+    print("[S3 MCP] Server started in background thread")
+
+    # Start health server in main thread
+    print("[S3 MCP] Starting health server on port 8011")
+    run_s3_health_server()

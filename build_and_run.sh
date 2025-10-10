@@ -7,12 +7,12 @@ echo "🚀 Building and running Kubernetes + AWS S3 Chat Application..."
 if [ ! -f .env ]; then
     echo "❌ .env file not found! Please create one from .env.example"
     echo "   cp .env.example .env"
-    echo "   Then edit .env with your MISTRAL_API_KEY"
+    echo "   Then edit .env with your DEEPSEEK_API_KEY"
     exit 1
 fi
 
-if ! grep -q "MISTRAL_API_KEY=" .env || grep -q "MISTRAL_API_KEY=your_mistral_api_key" .env; then
-    echo "❌ Please set your MISTRAL_API_KEY in the .env file"
+if ! grep -q "DEEPSEEK_API_KEY=" .env || grep -q "DEEPSEEK_API_KEY=your_mistral_api_key" .env; then
+    echo "❌ Please set your DEEPSEEK_API_KEY in the .env file"
     exit 1
 fi
 

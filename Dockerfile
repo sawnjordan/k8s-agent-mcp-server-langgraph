@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install system dependencies, unzip, and kubectl
+# Install system dependencies, unzip, kubectl
 RUN apt-get update && apt-get install -y \
     curl \
     unzip \
@@ -27,8 +27,8 @@ ENV PATH="/home/appuser/.local/bin:$PATH"
 USER appuser
 WORKDIR /home/appuser/app
 
-RUN mkdir -p /home/appuser/app/data \
-    && chown -R appuser:appuser /home/appuser/app/data
+# Create app data directory
+RUN mkdir -p /home/appuser/app/data
 
 # Copy requirements first for caching
 COPY --chown=appuser:appuser requirements.txt .
@@ -37,19 +37,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY --chown=appuser:appuser . .
 
-# Supervisor config
-RUN mkdir -p /home/appuser/logs
-COPY --chown=appuser:appuser supervisord.conf /home/appuser/supervisord.conf
-
-# Expose ports (8501 for Streamlit, 8000 for MCP server)
-EXPOSE 8501 8000
-
-# Create entrypoint script
-# COPY entrypoint.sh /entrypoint.sh
-# RUN chmod +x /entrypoint.sh
-
+# Copy and make entrypoint executable
 COPY --chown=appuser:appuser entrypoint.sh /home/appuser/entrypoint.sh
 RUN chmod +x /home/appuser/entrypoint.sh
 
-# Run supervisor to manage both services
+# Supervisor config (optional)
+COPY --chown=appuser:appuser supervisord.conf /home/appuser/supervisord.conf
+RUN mkdir -p /home/appuser/logs
+
+# Expose ports
+EXPOSE 8501 8000 8001 8010 8011 5678
+
+# Run entrypoint
 ENTRYPOINT ["/home/appuser/entrypoint.sh"]
