@@ -232,7 +232,7 @@ def run_s3_health_server():
 
 def run_s3_mcp_server():
     """Start MCP server (blocking)."""
-    s3_mcp.run(transport="streamable-http")
+    s3_mcp.run(transport="streamable-http", host="0.0.0.0")
 
 if __name__ == "__main__":
     # Start MCP server in a thread

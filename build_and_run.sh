@@ -49,9 +49,10 @@ echo "⏳ Waiting for services to be ready..."
 MAX_WAIT=12
 WAIT_TIME=0
 while [ $WAIT_TIME -lt $MAX_WAIT ]; do
-    K8S_MCP_HEALTH=$(docker compose exec -T kubernetes-chat curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/health || echo "000")
-    S3_MCP_HEALTH=$(docker compose exec -T kubernetes-chat curl -s -o /dev/null -w "%{http_code}" http://localhost:8011/health || echo "000")
+    K8S_MCP_HEALTH=$(docker compose exec -T kubernetes-chat curl -s -o /dev/null -w "%{http_code}" http://k8s-mcp:8001/health || echo "000")
+    S3_MCP_HEALTH=$(docker compose exec -T kubernetes-chat curl -s -o /dev/null -w "%{http_code}" http://s3-mcp:8011/health || echo "000")
     STREAMLIT_HEALTH=$(docker compose exec -T kubernetes-chat curl -s -o /dev/null -w "%{http_code}" http://localhost:8501 || echo "000")
+
 
     if [ "$K8S_MCP_HEALTH" = "200" ] && [ "$S3_MCP_HEALTH" = "200" ] && [ "$STREAMLIT_HEALTH" = "200" ]; then
         echo "✅ All services are ready!"

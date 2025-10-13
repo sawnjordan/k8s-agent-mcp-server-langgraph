@@ -15,16 +15,13 @@ export PATH="$HOME/.local/bin:$PATH"
 echo "[ENV] Running as user: $(whoami)"
 echo "[ENV] HOME: $HOME"
 
-# ==============================
-# Determine container type
-# ==============================
-# Must be set in docker-compose environment
 CONTAINER_TYPE="${CONTAINER_TYPE:-k8s}"  # default k8s
 
+# ==============================
+# Fix kubeconfig for k8s container
+# ==============================
 if [[ "$CONTAINER_TYPE" == "k8s" ]]; then
-    # ------------------------------
-    # Kubernetes MCP container
-    # ------------------------------
+    echo "[K8S] Setting up kubeconfig..."
     KUBE_DIR_WRITABLE="$HOME/.kube-writable"
     mkdir -p "$KUBE_DIR_WRITABLE"
 
@@ -39,37 +36,44 @@ if [[ "$CONTAINER_TYPE" == "k8s" ]]; then
 
     export KUBECONFIG="$KUBE_DIR_WRITABLE/config"
 
-    echo "[KUBECONFIG] First 10 lines before patch:"
-    head -n 10 "$KUBECONFIG" || true
-
     CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-127.0.0.1}"
     CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-6443}"
 
     sed -i "s#\(server: https://\)[^:]\+:[0-9]\+#\1$CONTROL_PLANE_IP:$CONTROL_PLANE_PORT#g" "$KUBECONFIG"
+fi
 
-    echo "[KUBECONFIG] First 10 lines after patch:"
-    head -n 10 "$KUBECONFIG" || true
+# ==============================
+# Function to wait for service
+# ==============================
+wait_for_service() {
+    local url=$1
+    local name=$2
+    local retries=${3:-30}
+    local wait_sec=${4:-2}
 
+    echo "[WAIT] Waiting for $name at $url..."
+    for i in $(seq 1 $retries); do
+        if curl -fs "$url" >/dev/null 2>&1; then
+            echo "[WAIT] $name is ready!"
+            return 0
+        fi
+        sleep $wait_sec
+    done
+    echo "[WAIT] ❌ $name failed to become ready"
+    exit 1
+}
+
+# ==============================
+# Start services
+# ==============================
+if [[ "$CONTAINER_TYPE" == "k8s" ]]; then
     echo "[MCP] Starting Kubernetes MCP server..."
     python k8_mcp_server.py &
-
     MCP_PID=$!
-    # Wait for health
-    for i in {1..30}; do
-        if curl -fs http://localhost:8001/health >/dev/null; then
-            echo "[MCP] ✅ Ready!"
-            break
-        fi
-        echo "[MCP] ⏱ Still waiting..."
-        sleep 1
-    done
 
-    if ! curl -fs http://localhost:8001/health >/dev/null; then
-        echo "[MCP] ❌ MCP server failed to start"
-        exit 1
-    fi
+    wait_for_service http://localhost:8001/health "K8s MCP"
 
-    echo "[STREAMLIT] Starting UI..."
+    echo "[STREAMLIT] Starting Streamlit UI..."
     streamlit run web_app.py \
         --server.address=0.0.0.0 \
         --server.port=8501 \
@@ -78,11 +82,13 @@ if [[ "$CONTAINER_TYPE" == "k8s" ]]; then
 
     wait -n $MCP_PID $STREAMLIT_PID
 
-else
-    # ------------------------------
-    # S3 MCP container
-    # ------------------------------
-    echo "[S3] Starting S3 Health Server + MCP..."
-    python s3_mcp_server.py &
-    wait
+elif [[ "$CONTAINER_TYPE" == "s3" ]]; then
+    echo "[S3] Starting S3 MCP server..."
+    python aws_s3_server.py &
+    S3_MCP_PID=$!
+
+    wait_for_service http://localhost:8011/health "S3 MCP"
+
+    wait $S3_MCP_PID
+
 fi
