@@ -437,9 +437,12 @@ def list_contexts() -> str:
 
 # --- Run MCP server and FastAPI health endpoint ---
 def run_mcp_server():
-    # Run MCP server on port 8000
+    # Just call run without host/port; MCP will use its default
     mcp.run(transport="streamable-http")
 
 if __name__ == "__main__":
+    # Start MCP server in a thread
     threading.Thread(target=run_mcp_server, daemon=True).start()
+
+    # Run FastAPI health on port 8001 (Docker can reach it)
     uvicorn.run(app, host="0.0.0.0", port=8001)

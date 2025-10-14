@@ -16,44 +16,31 @@ from chat_history import init_db, save_message, load_messages, list_sessions_wit
 load_dotenv()
 init_db()  # Ensure DB exists
 
-# -----------------------------
-# Helper to run async inside Streamlit
-# -----------------------------
-def run_async_in_streamlit(coro):
-    """
-    Safely run an async coroutine inside Streamlit.
-    Works whether an event loop is already running or not.
-    """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # No running loop, safe to use asyncio.run
-        return asyncio.run(coro)
-    else:
-        # Loop exists, run coroutine in it
-        return loop.run_until_complete(coro)
-
-# -----------------------------
-# Backend call to MCP
-# -----------------------------
-async def run_multi_query(user_input, model_name="deepseek-chat"):
+# --- Backend call to MCP ---
+async def run_multi_query(user_input, model_name="deepseek-reasoner"):
+    # mistral_key = os.getenv("MISTRAL_API_KEY")
     deepseek_key = os.getenv("DEEPSEEK_API_KEY")
 
-    mcp_server_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp")
+    # mcp_server_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp")
+    # mcp_server_url = os.getenv("MCP_SERVER_URL", "http://k8s-mcp:8000/mcp")
+
     aws_s3_mcp_url = os.getenv("AWS_S3_MCP_URL", "http://127.0.0.1:8010/mcp")
 
+    # model = ChatMistralAI(model=model_name, api_key=mistral_key)
     model = ChatOpenAI(
+        # model="deepseek-chat",
         model=model_name,
         api_key=deepseek_key,
         base_url="https://api.deepseek.com",
     )
 
+    # Multi-server MCP client
     client = MultiServerMCPClient(
         {
-            "kubernetes": {
-                "transport": "streamable_http",
-                "url": mcp_server_url,
-            },
+            # "kubernetes": {
+            #     "transport": "streamable_http",
+            #     "url": mcp_server_url,
+            # },
             "aws_s3": {
                 "transport": "streamable_http",
                 "url": aws_s3_mcp_url,
@@ -77,6 +64,7 @@ async def run_multi_query(user_input, model_name="deepseek-chat"):
         response = await model_with_tools.ainvoke(messages)
         return {"messages": [response]}
 
+    # Build LangGraph pipeline
     builder = StateGraph(MessagesState)
     builder.add_node("call_model", call_model)
     builder.add_node("tools", tool_node)
@@ -85,7 +73,7 @@ async def run_multi_query(user_input, model_name="deepseek-chat"):
     builder.add_edge("tools", "call_model")
     graph = builder.compile()
 
-    # Build conversation history
+    # Updated system prompt to include both K8s and S3
     conversation_history = [
         {
             "role": "system",
@@ -102,13 +90,12 @@ async def run_multi_query(user_input, model_name="deepseek-chat"):
     ]
     conversation_history.append({"role": "user", "content": user_input})
 
+    # Run with full context
     result = await graph.ainvoke({"messages": conversation_history})
     last_msg = result["messages"][-1].content
     return last_msg if isinstance(last_msg, str) else str(last_msg)
 
-# -----------------------------
-# Streamlit UI
-# -----------------------------
+# --- Streamlit UI ---
 def main():
     st.set_page_config(
         page_title="Kubernetes Chat", 
@@ -125,30 +112,39 @@ def main():
     if "sessions_page" not in st.session_state:
         st.session_state.sessions_page = 0
 
-    # Sidebar
+    # Sidebar with session management
     with st.sidebar:
         st.title("☸️ Kubernetes Chat")
-
+        
+        # Model selection at the top
+        # MODEL_OPTIONS = {
+        #     "Mistral Large": "mistral-large-latest",
+        #     "Mistral Medium": "mistral-medium-latest",
+        #     "Mistral Small": "mistral-small",
+        # }
         MODEL_OPTIONS = {
             "Deepseek Chat": "deepseek-chat",
             "Deepseek Reasoner": "deepseek-reasoner",
         }
         selected_model = st.selectbox("Select Model", options=list(MODEL_OPTIONS.keys()), index=0)
         st.session_state.selected_model = MODEL_OPTIONS[selected_model]
-
+        
         st.divider()
-
-        # New Session
+        
+        # NEW SESSION BUTTON
         if st.button("➕ New Session", use_container_width=True):
             st.session_state.session_id = str(uuid.uuid4())
             st.session_state.messages = []
-            st.session_state.sessions_page = 0
+            st.session_state.sessions_page = 0  # Reset to first page
             st.rerun()
 
-        # Search sessions
+        # Search box
         search_query = st.text_input("🔍 Search chats", placeholder="Type to search...")
+        
+        # Load sessions with preview
         sessions_data = list_sessions_with_preview(limit=50)
-
+        
+        # Filter sessions based on search query
         if search_query:
             filtered_sessions = [
                 s for s in sessions_data 
@@ -156,8 +152,8 @@ def main():
             ]
         else:
             filtered_sessions = sessions_data
-
-        # Pagination
+        
+        # Increase sessions per page for list view
         sessions_per_page = 20
         total_sessions = len(filtered_sessions)
         start_idx = st.session_state.sessions_page * sessions_per_page
@@ -167,6 +163,7 @@ def main():
         if not filtered_sessions:
             st.info("No sessions found")
         else:
+            # Display sessions as a clean list using radio buttons for selection
             session_options = []
             for session in paginated_sessions:
                 preview = session["preview"][:45] + "..." if len(session["preview"]) > 45 else session["preview"]
@@ -174,29 +171,33 @@ def main():
                     preview = "(empty session)"
                 session_options.append((session["session_id"], preview))
 
+            # Map session_id → preview
             radio_labels = {sid: preview for sid, preview in session_options}
+
+            # Use session_id as the value in st.radio (stable unique key)
             selected_session_id = st.radio(
                 "Select session:",
-                options=list(radio_labels.keys()),
-                format_func=lambda sid: radio_labels[sid],
+                options=list(radio_labels.keys()),  # stable keys
+                format_func=lambda sid: radio_labels[sid],  # show preview as label
                 index=None if st.session_state.session_id not in radio_labels else list(radio_labels.keys()).index(st.session_state.session_id),
                 label_visibility="collapsed",
                 key="session_selector"
             )
 
+            # Update session if changed
             if selected_session_id and selected_session_id != st.session_state.session_id:
                 st.session_state.session_id = selected_session_id
                 st.session_state.messages = load_messages(selected_session_id)
                 st.rerun()
-
         # Pagination controls
         if total_sessions > sessions_per_page:
             st.divider()
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
-                if st.session_state.sessions_page > 0 and st.button("⬅️ Prev", use_container_width=True):
-                    st.session_state.sessions_page -= 1
-                    st.rerun()
+                if st.session_state.sessions_page > 0:
+                    if st.button("⬅️ Prev", use_container_width=True):
+                        st.session_state.sessions_page -= 1
+                        st.rerun()
             with col2:
                 total_pages = max(1, (total_sessions + sessions_per_page - 1) // sessions_per_page)
                 st.markdown(
@@ -204,40 +205,48 @@ def main():
                     unsafe_allow_html=True
                 )
             with col3:
-                if end_idx < total_sessions and st.button("➡️", use_container_width=True):
-                    st.session_state.sessions_page += 1
-                    st.rerun()
-
+                if end_idx < total_sessions:
+                    if st.button("➡️", use_container_width=True):
+                        st.session_state.sessions_page += 1
+                        st.rerun()
+        
         st.divider()
+        
+        # Display current session info
         st.info(f"Current Session: `{st.session_state.session_id[:8]}...`")
 
     # Main chat area
     st.title("Kubernetes MCP Chat")
     
+    # Display chat history
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
+    # Chat input
     user_input = st.chat_input("Ask something about Kubernetes...")
     if user_input:
-        async def handle_user_input():
-            # Add user message to UI
-            with st.chat_message("user"):
-                st.markdown(user_input)
-
-            save_message(st.session_state.session_id, "user", user_input)
-
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    answer = await run_multi_query(user_input, st.session_state.selected_model)
-                    st.markdown(answer)
-
-            save_message(st.session_state.session_id, "assistant", answer)
-            st.session_state.messages = load_messages(st.session_state.session_id)
-            st.rerun()
-
-        # Run async safely inside Streamlit
-        run_async_in_streamlit(handle_user_input())
+        # Add user message to UI immediately
+        with st.chat_message("user"):
+            st.markdown(user_input)
+        
+        # Save user message to DB
+        save_message(st.session_state.session_id, "user", user_input)
+        
+        # Get assistant response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                answer = asyncio.run(run_multi_query(user_input, st.session_state.selected_model))
+                st.markdown(answer)
+        
+        # Save assistant message to DB
+        save_message(st.session_state.session_id, "assistant", answer)
+        
+        # Reload messages to keep session state in sync
+        st.session_state.messages = load_messages(st.session_state.session_id)
+        
+        # Rerun to update the UI and sidebar
+        st.rerun()
 
 if __name__ == "__main__":
     main()

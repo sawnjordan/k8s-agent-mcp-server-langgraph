@@ -9,7 +9,8 @@ import json
 import time
 
 # --- Initialize MCP server for AWS S3 ---
-s3_mcp = FastMCP("AWS S3", port=8010)
+# s3_mcp = FastMCP("AWS S3", port=8010)
+s3_mcp = FastMCP("AWS S3")
 
 # --- FastAPI app for health ---
 s3_health_app = FastAPI()
@@ -232,10 +233,11 @@ def run_s3_health_server():
 
 def run_s3_mcp_server():
     """Start MCP server (blocking)."""
-    s3_mcp.run(transport="streamable-http", host="0.0.0.0")
+    # Remove 'host' argument
+    s3_mcp.run(transport="streamable-http")
 
 if __name__ == "__main__":
-    # Start MCP server in a thread
+    # Start MCP server in a background thread
     mcp_thread = threading.Thread(target=run_s3_mcp_server, daemon=True)
     mcp_thread.start()
     print("[S3 MCP] Server started in background thread")
