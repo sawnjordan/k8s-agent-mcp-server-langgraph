@@ -1,27 +1,27 @@
 version: '3.8'
 
 services:
-  # k8s-mcp:
-  #   build: .
-  #   container_name: k8s-mcp
-  #   ports:
-  #     - "8000:8000"
-  #     - "8001:8001"
-  #   environment:
-  #     - CONTAINER_TYPE=k8s
-  #     - KUBECONFIG=/home/appuser/.kube-writable/config
-  #   volumes:
-  #     - ~/.kube:/home/appuser/.kube:ro
-  #     - ./data:/home/appuser/app/data
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   networks:
-  #     - k8s_agent_net
-  #   entrypoint: ["/home/appuser/entrypoint.sh"]
+  k8s-mcp:
+    build: .
+    container_name: k8s-mcp
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    environment:
+      - CONTAINER_TYPE=k8s
+      - KUBECONFIG=/home/appuser/.kube-writable/config
+    volumes:
+      - ~/.kube:/home/appuser/.kube:ro
+      - ./data:/home/appuser/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - k8s_agent_net
+    entrypoint: ["/home/appuser/entrypoint.sh"]
 
   s3-mcp:
     build: .
@@ -54,15 +54,15 @@ services:
     ports:
       - "8501:8501"
     depends_on:
-      # k8s-mcp:
-      #   condition: service_healthy
+      k8s-mcp:
+        condition: service_healthy
       s3-mcp:
         condition: service_healthy
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      # - MCP_SERVER_URL=http://k8s-mcp:8000/mcp
-      - AWS_S3_MCP_URL=http://127.0.0.1:8010/mcp
-      # - AWS_S3_MCP_URL=http://s3-mcp:8010/mcp
+      - MCP_SERVER_URL=http://127.0.0.1:8000/mcp
+      # - AWS_S3_MCP_URL=http://127.0.0.1:8010/mcp
+      - AWS_S3_MCP_URL=http://s3-mcp:8010/mcp
       - KUBECONFIG=/home/appuser/.kube-writable/config
     volumes:
       - ./data:/home/appuser/app/data

@@ -8,16 +8,16 @@ import threading
 import json
 import time
 
+
 # --- Initialize MCP server for AWS S3 ---
-# s3_mcp = FastMCP("AWS S3", port=8010)
-s3_mcp = FastMCP("AWS S3")
+# Bind to 0.0.0.0 so other containers can reach it
+s3_mcp = FastMCP("AWS S3", host="0.0.0.0", port=8010)
 
 # --- FastAPI app for health ---
 s3_health_app = FastAPI()
 
 @s3_health_app.get("/health")
 def health_check():
-    """Check if AWS S3 is accessible."""
     try:
         s3 = boto3.client("s3")
         s3.list_buckets()
@@ -227,21 +227,22 @@ def update_bucket_policy_json(bucket_name: str, new_policy_json: str) -> str:
     except ClientError as e:
         return f"AWS error: {e}"
 
-def run_s3_health_server():
-    """Start FastAPI health server (blocking)."""
-    uvicorn.run(s3_health_app, host="0.0.0.0", port=8011, log_level="info")
-
-def run_s3_mcp_server():
-    """Start MCP server (blocking)."""
-    # Remove 'host' argument
+# --- Run S3 MCP server ---
+def run_s3_mcp():
+    print("AWS S3 MCP server running on port 8010")
+    # Ensure it binds to all interfaces
     s3_mcp.run(transport="streamable-http")
 
-if __name__ == "__main__":
-    # Start MCP server in a background thread
-    mcp_thread = threading.Thread(target=run_s3_mcp_server, daemon=True)
-    mcp_thread.start()
-    print("[S3 MCP] Server started in background thread")
+# --- Run S3 Health server ---
+def run_s3_health_server():
+    print("AWS S3 Health server running on port 8011")
+    uvicorn.run(s3_health_app, host="0.0.0.0", port=8011)
 
-    # Start health server in main thread
-    print("[S3 MCP] Starting health server on port 8011")
-    run_s3_health_server()
+if __name__ == "__main__":
+    # Run both servers in separate threads
+    threading.Thread(target=run_s3_mcp, daemon=True).start()
+    threading.Thread(target=run_s3_health_server, daemon=True).start()
+
+    # Keep the main thread alive
+    while True:
+        time.sleep(1)

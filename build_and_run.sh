@@ -38,7 +38,7 @@ mkdir -p ./data
 
 # --- Build Docker images ---
 echo "🏗️  Building Docker images..."
-docker compose build
+docker compose build 
 
 # --- Start services ---
 echo "🚀 Starting services..."
