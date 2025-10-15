@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 version: '3.8'
 
 services:
@@ -10,9 +11,14 @@ services:
     environment:
       - CONTAINER_TYPE=k8s
       - KUBECONFIG=/home/appuser/.kube-writable/config
+      - AWS_CONFIG_FILE=/home/appuser/.aws/config.bkp
+      - AWS_SHARED_CREDENTIALS_FILE=/home/appuser/.aws/credentials
     volumes:
       - ~/.kube:/home/appuser/.kube:ro
       - ./data:/home/appuser/app/data
+      - ~/.aws:/home/appuser/.aws:ro
+      - ~/.aws/credentials:/home/appuser/.aws/credentials:ro
+      - ~/.aws/config.bkp:/home/appuser/.aws/config:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
@@ -38,6 +44,8 @@ services:
     volumes:
       - ~/.aws:/home/appuser/.aws:ro
       - ./data:/home/appuser/app/data
+      - ~/.aws/credentials:/home/appuser/.aws/credentials:ro
+      - ~/.aws/config.bkp:/home/appuser/.aws/config:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
@@ -60,16 +68,14 @@ services:
         condition: service_healthy
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - MCP_SERVER_URL=http://127.0.0.1:8000/mcp
-      # - AWS_S3_MCP_URL=http://127.0.0.1:8010/mcp
+      - MCP_SERVER_URL=http://k8s-mcp:8000/mcp
       - AWS_S3_MCP_URL=http://s3-mcp:8010/mcp
-      - KUBECONFIG=/home/appuser/.kube-writable/config
+      # - KUBECONFIG=/home/appuser/.kube-writable/config
+      # - AWS_CONFIG_FILE=/home/appuser/.aws/config.bkp
+      # - AWS_SHARED_CREDENTIALS_FILE=/home/appuser/.aws/credentials
     volumes:
       - ./data:/home/appuser/app/data
       - ~/.kube:/home/appuser/.kube:ro
-      - ~/.aws:/home/appuser/.aws:ro
-      - ~/.aws/credentials:/home/appuser/.aws/credentials:ro
-      - ~/.aws/config.bkp:/home/appuser/.aws/config:ro
     restart: unless-stopped
     env_file:
       - .env.aws

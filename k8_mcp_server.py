@@ -4,14 +4,16 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 import uvicorn
 import threading
+import time
 
-# Initialize MCP server
-mcp = FastMCP("Kubernetes")
+# --- Initialize MCP server for Kubernetes ---
+# Bind to 0.0.0.0 so other containers can reach it
+mcp = FastMCP("Kubernetes", host="0.0.0.0", port=8000)
 
-# --- FastAPI app for health check ---
-app = FastAPI()
+# --- FastAPI app for health ---
+k8s_health_app = FastAPI()
 
-@app.get("/health")
+@k8s_health_app.get("/health")
 def health_check():
     return JSONResponse(content={"status": "ok"})
 
@@ -435,14 +437,21 @@ def list_contexts() -> str:
         "No contexts found in your kubeconfig."
     )
 
-# --- Run MCP server and FastAPI health endpoint ---
-def run_mcp_server():
-    # Just call run without host/port; MCP will use its default
+# --- Run MCP server ---
+def run_k8s_mcp():
+    print("Kubernetes MCP server running on port 8000")
     mcp.run(transport="streamable-http")
 
-if __name__ == "__main__":
-    # Start MCP server in a thread
-    threading.Thread(target=run_mcp_server, daemon=True).start()
+# --- Run Health server ---
+def run_k8s_health_server():
+    print("Kubernetes Health server running on port 8001")
+    uvicorn.run(k8s_health_app, host="0.0.0.0", port=8001)
 
-    # Run FastAPI health on port 8001 (Docker can reach it)
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+if __name__ == "__main__":
+    # Start both servers in separate threads
+    threading.Thread(target=run_k8s_mcp, daemon=True).start()
+    threading.Thread(target=run_k8s_health_server, daemon=True).start()
+
+    # Keep main thread alive
+    while True:
+        time.sleep(1)

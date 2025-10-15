@@ -21,7 +21,7 @@ async def run_multi_query(user_input, model_name="deepseek-reasoner"):
     # mistral_key = os.getenv("MISTRAL_API_KEY")
     deepseek_key = os.getenv("DEEPSEEK_API_KEY")
 
-    mcp_server_url = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp")
+    mcp_server_url = os.getenv("MCP_SERVER_URL", "http://k8s-mcp:8000/mcp")
     # mcp_server_url = os.getenv("MCP_SERVER_URL", "http://k8s-mcp:8000/mcp")
 
     aws_s3_mcp_url = os.getenv("AWS_S3_MCP_URL", "http://s3-mcp:8010/mcp")

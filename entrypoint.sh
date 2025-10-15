@@ -36,10 +36,6 @@ if [[ "$CONTAINER_TYPE" == "k8s" ]]; then
 
     export KUBECONFIG="$KUBE_DIR_WRITABLE/config"
 
-    CONTROL_PLANE_IP="${CONTROL_PLANE_IP:-127.0.0.1}"
-    CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-6443}"
-
-    sed -i "s#\(server: https://\)[^:]\+:[0-9]\+#\1$CONTROL_PLANE_IP:$CONTROL_PLANE_PORT#g" "$KUBECONFIG"
 fi
 
 # ==============================
