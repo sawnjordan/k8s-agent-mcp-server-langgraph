@@ -70,6 +70,8 @@ To enable the S3 integration:
 AWS_ACCESS_KEY_ID=<your-access-key>
 AWS_SECRET_ACCESS_KEY=<your-secret-key>
 AWS_DEFAULT_REGION=<your-region>
+AWS_SESSION_TOKEN=<your-session-token>
+AWS_PROFILE=<your-profile>
 ```
 
 These credentials must have s3:* and (optionally) kms:* permissions.
