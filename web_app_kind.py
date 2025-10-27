@@ -124,7 +124,7 @@ def main():
             "Deepseek Chat": "deepseek-chat",
             "Deepseek Reasoner": "deepseek-reasoner",
         }
-        selected_model = st.selectbox("Select Model", options=list(MODEL_OPTIONS.keys()), index=1)
+        selected_model = st.selectbox("Select Model", options=list(MODEL_OPTIONS.keys()), index=0)
         st.session_state.selected_model = MODEL_OPTIONS[selected_model]
         
         st.divider()

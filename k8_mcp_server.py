@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 import threading
 import time
+import os
 
 # --- Initialize MCP server for Kubernetes ---
 # Bind to 0.0.0.0 so other containers can reach it
@@ -16,6 +17,12 @@ k8s_health_app = FastAPI()
 @k8s_health_app.get("/health")
 def health_check():
     return JSONResponse(content={"status": "ok"})
+
+# --- Detect if running inside a container ---
+def running_in_container() -> bool:
+    return os.path.exists("/.dockerenv") or os.environ.get("KUBERNETES_CHAT_CONTAINER") == "true"
+
+active_forwards = {}
 
 # --- Utility: run kubectl safely ---
 def run_kubectl(command: str, empty_msg: str = None) -> str:
@@ -34,13 +41,15 @@ def run_kubectl(command: str, empty_msg: str = None) -> str:
             return "Sorry, I don’t have a tool for that action yet."
         return f"Error: {stderr}"
 
-active_forwards = {}
-
+# --- Start port-forward ---
 def start_port_forward(target_type: str, name: str, local_port: int, remote_port: int, namespace: str):
     key = f"{target_type}/{namespace}/{name}"
 
     if key in active_forwards:
         return f"⚠️ Port-forward already active for {key} on local port {active_forwards[key]['local_port']}"
+
+    # Bind address based on environment
+    addr = "0.0.0.0" if running_in_container() else "127.0.0.1"
 
     cmd = [
         "kubectl",
@@ -49,12 +58,10 @@ def start_port_forward(target_type: str, name: str, local_port: int, remote_port
         f"{local_port}:{remote_port}",
         "-n",
         namespace,
-        "--address",
-        "0.0.0.0"
+        "--address", addr
     ]
 
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
     active_forwards[key] = {
         "proc": proc,
         "local_port": local_port,
@@ -63,9 +70,16 @@ def start_port_forward(target_type: str, name: str, local_port: int, remote_port
         "target_type": target_type
     }
 
-    return f"✅ Port-forward active: http://localhost:{local_port} -> {target_type}/{name}:{remote_port}"
+    msg = f"✅ Port-forward active: {target_type}/{name}:{remote_port} -> local port {local_port}"
+    if running_in_container():
+        msg += f"\n⚠️ You are inside a container. Ensure this port is exposed in docker-compose.yml, e.g. - \"{local_port}:{local_port}\""
+        msg += f"\nAccess it on host at http://localhost:{local_port}"
+    else:
+        msg += f"\nAccess it at http://localhost:{local_port}"
+    return msg
 
-def stop_port_forward(target_type: str, name: str, namespace: str = "default"):
+# --- Stop port-forward ---
+def stop_port_forward(target_type: str, name: str, namespace: str = "default") -> str:
     key = f"{target_type}/{namespace}/{name}"
     if key not in active_forwards:
         return f"No active port-forward found for {key}"
@@ -76,6 +90,7 @@ def stop_port_forward(target_type: str, name: str, namespace: str = "default"):
     del active_forwards[key]
 
     return f"Port-forward stopped for {key}"
+
 
 # --- Core resources ---
 @mcp.tool(name="get_nodes", description="List all nodes in the cluster")
@@ -99,10 +114,16 @@ def get_pod_logs(pod_name: str, namespace: str = "default", container: str = "")
     container_part = f"-c {container}" if container else ""
     return run_kubectl(f"kubectl logs {pod_name} -n {namespace} {container_part}", f"No logs found for pod '{pod_name}' in '{namespace}' namespace.")
 
-@mcp.tool(name="exec_pod", description="Execute a command inside a pod")
-def exec_pod(pod_name: str, namespace: str = "default", command: str = "/bin/sh") -> str:
-    return run_kubectl(f"kubectl exec -it {pod_name} -n {namespace} -- {command}", f"Failed to execute command in pod '{pod_name}'.")
-
+@mcp.tool(name="exec_pod", description="Execute a command inside a pod (non-interactive)")
+def exec_pod(pod_name: str, namespace: str = "default", command: str = "ls /") -> str:
+    """
+    Execute a non-interactive command inside a Kubernetes pod and return the output.
+    Suitable for chat or UI environments (no TTY).
+    """
+    return run_kubectl(
+        f"kubectl exec {pod_name} -n {namespace} -- {command}",
+        f"Failed to execute command in pod '{pod_name}'."
+    )
 
 # --- Deployments ---
 @mcp.tool(name="get_deployments", description="List all deployments in a namespace")
@@ -258,18 +279,20 @@ def get_storageclasses() -> str:
 
 
 # --- Pod Debugging ---
-@mcp.tool(name="get_pending_pods", description="List pods stuck in Pending state across all namespaces")
-def get_pending_pods() -> str:
+@mcp.tool(name="get_pending_pods", description="List pods stuck in Pending state (optionally for a specific namespace)")
+def get_pending_pods(namespace: str = None) -> str:
+    ns_flag = f"-n {namespace}" if namespace else "--all-namespaces"
     return run_kubectl(
-        "kubectl get pods --all-namespaces --field-selector=status.phase=Pending",
-        "No pending pods found across all namespaces."
+        f"kubectl get pods {ns_flag} --field-selector=status.phase=Pending",
+        "No pending pods found."
     )
 
-@mcp.tool(name="get_crashloop_pods", description="List pods in CrashLoopBackOff across all namespaces")
-def get_crashloop_pods() -> str:
+@mcp.tool(name="get_crashloop_pods", description="List pods in CrashLoopBackOff (optionally for a specific namespace)")
+def get_crashloop_pods(namespace: str = None) -> str:
+    ns_flag = f"-n {namespace}" if namespace else "--all-namespaces"
     return run_kubectl(
-        "kubectl get pods --all-namespaces | grep CrashLoopBackOff",
-        "No CrashLoopBackOff pods found across all namespaces."
+        f"kubectl get pods {ns_flag} | grep CrashLoopBackOff",
+        "No CrashLoopBackOff pods found."
     )
 
 @mcp.tool(name="logs_all_containers", description="Get logs from all containers in a pod")
@@ -302,6 +325,12 @@ def rollback_deployment(deployment_name: str, namespace: str = "default") -> str
         f"Failed to rollback deployment '{deployment_name}' in '{namespace}' namespace."
     )
 
+@mcp.tool(name="rollout_history", description="Show rollout history of a deployment")
+def rollout_history(deployment_name: str, namespace: str = "default") -> str:
+    return run_kubectl(
+        f"kubectl rollout history deployment {deployment_name} -n {namespace}",
+        f"No rollout history found for deployment '{deployment_name}' in '{namespace}' namespace."
+    )
 
 # --- Networking & Connectivity ---
 @mcp.tool(name="get_endpoints", description="List all endpoints in a namespace")
@@ -327,7 +356,6 @@ def port_forward_service(service_name: str, local_port: int = None, remote_port:
 
     return start_port_forward("service", service_name, local_port, remote_port, namespace)
 
-
 @mcp.tool(name="port_forward_pod", description="Forward a local port to a pod port")
 def port_forward_pod(pod_name: str, local_port: int = None, remote_port: int = None, namespace: str = "default") -> str:
     # Auto-detect pod container port
@@ -348,23 +376,14 @@ def port_forward_pod(pod_name: str, local_port: int = None, remote_port: int = N
 
     return start_port_forward("pod", pod_name, local_port, remote_port, namespace)
 
-
 @mcp.tool(name="stop_port_forward", description="Stop an active port-forward")
 def stop_port_forward_tool(name: str, namespace: str = "default", target_type: str = "service") -> str:
     return stop_port_forward(target_type, name, namespace)
 
-
-# @mcp.tool(name="port_forward", description="Forward a local port to a pod port")
-# def port_forward(pod_name: str, local_port: int, remote_port: int, namespace: str = "default") -> str:
-#     return run_kubectl(
-#         f"kubectl port-forward pod/{pod_name} {local_port}:{remote_port} -n {namespace}",
-#         f"Failed to port-forward pod '{pod_name}' in '{namespace}' namespace."
-#     )
-
 @mcp.tool(name="test_dns", description="Test DNS resolution inside the cluster using busybox")
 def test_dns() -> str:
     return run_kubectl(
-        "kubectl run dns-test --rm -it --image=busybox --restart=Never -- nslookup kubernetes.default",
+        "kubectl run dns-test --rm --image=busybox --restart=Never -- nslookup kubernetes.default",
         "Failed to resolve DNS inside the cluster."
     )
 
